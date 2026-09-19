@@ -28,6 +28,7 @@ import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -56,7 +57,10 @@ class VideoProcessorIntegrationTest {
 
   @Container
   static MinIOContainer minio =
-      new MinIOContainer("quay.io/minio/minio:RELEASE.2024-10-13T13-34-11Z");
+      new MinIOContainer(
+          // o MinIO saiu do Docker Hub; mesma imagem publicada no quay.io
+          DockerImageName.parse("quay.io/minio/minio:RELEASE.2024-10-13T13-34-11Z")
+              .asCompatibleSubstituteFor("minio/minio"));
 
   @DynamicPropertySource
   static void props(DynamicPropertyRegistry registry) {
