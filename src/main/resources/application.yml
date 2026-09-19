@@ -1,5 +1,5 @@
 server:
-  port: 8082
+  port: ${SERVER_PORT:8082}
 
 spring:
   application:
@@ -9,6 +9,38 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASS:guest}
+    # AMQPS (porta 5671) no Amazon MQ; desligado no ambiente local
+    ssl:
+      enabled: ${RABBITMQ_SSL_ENABLED:false}
+    # WRK-5: o resultado so conta como publicado depois de confirmado pelo broker
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+
+storage:
+  # vazio = S3 padrao da regiao (AWS); no local aponta para o MinIO
+  endpoint: ${STORAGE_ENDPOINT:}
+  # vazio = cadeia padrao de credenciais da AWS (LabRole no Learner Lab)
+  access-key: ${STORAGE_ACCESS_KEY:}
+  secret-key: ${STORAGE_SECRET_KEY:}
+  bucket: ${STORAGE_BUCKET:fiapx}
+  region: ${STORAGE_REGION:us-east-1}
+
+processor:
+  concurrency: ${PROCESSOR_CONCURRENCY:1}
+  max-concurrency: ${PROCESSOR_MAX_CONCURRENCY:1}
+  max-attempts: ${PROCESSOR_MAX_ATTEMPTS:3}
+  backoff:
+    initial: ${PROCESSOR_BACKOFF_INITIAL:1s}
+    multiplier: 2.0
+    max: 10s
+  ffmpeg:
+    binary: ${FFMPEG_BINARY:ffmpeg}
+    timeout: ${FFMPEG_TIMEOUT:10m}
+    max-fps: 30
+  work-dir: ${PROCESSOR_WORK_DIR:}
+  publish-confirm-timeout: 10s
 
 management:
   endpoints:
@@ -18,6 +50,13 @@ management:
   endpoint:
     health:
       show-details: always
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState, rabbit
+        liveness:
+          include: livenessState
   metrics:
     tags:
       application: ${spring.application.name}
