@@ -160,12 +160,15 @@ class VideoProcessorIntegrationTest {
     assertThat(event.get("errorCode").asText()).isEqualTo("INVALID_VIDEO");
     assertThat(event.get("attempts").asInt()).isEqualTo(1);
 
-    Message dead = null;
-    for (int i = 0; i < 20 && dead == null; i++) {
-      dead = rabbitTemplate.receive(RabbitTopologyConfig.PROCESSING_DLQ, 500);
+    // outros testes tambem mandam mensagens para a DLQ: procura a deste video
+    boolean deadLettered = false;
+    for (int i = 0; i < 20 && !deadLettered; i++) {
+      Message dead = rabbitTemplate.receive(RabbitTopologyConfig.PROCESSING_DLQ, 500);
+      deadLettered =
+          dead != null
+              && new String(dead.getBody(), StandardCharsets.UTF_8).contains(video.toString());
     }
-    assertThat(dead).isNotNull();
-    assertThat(new String(dead.getBody(), StandardCharsets.UTF_8)).contains(video.toString());
+    assertThat(deadLettered).as("mensagem do video corrompido na DLQ").isTrue();
   }
 
   @Test
