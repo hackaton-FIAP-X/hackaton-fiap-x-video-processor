@@ -1,4 +1,9 @@
+# Imagem de DESENVOLVIMENTO (hot reload via docker-compose.yml deste repo).
+# Producao: Dockerfile.prod.
 FROM eclipse-temurin:21-jdk-alpine
+
+# o worker chama o ffmpeg como processo externo
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 

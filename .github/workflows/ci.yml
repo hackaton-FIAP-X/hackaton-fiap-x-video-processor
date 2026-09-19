@@ -1,0 +1,91 @@
+name: CI
+
+# PLT-5 — verificacao continua com gate de cobertura.
+# Polyrepo: cada repositorio constroi apenas o seu servico, entao o "filtro de
+# path" do enunciado ja e satisfeito pela propria separacao dos repos.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build & test (video-processor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+
+      - name: Instala o FFmpeg
+        # sem ele os testes de integracao (RabbitMQ + MinIO via Testcontainers)
+        # e o teste do extrator com video real sao pulados
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg && ffmpeg -version | head -1
+
+      - name: Build, test, Spotless e gate de cobertura
+        # mvn verify roda: compile -> test -> jacoco:report -> jacoco:check -> spotless:check
+        run: ./mvnw -B --no-transfer-progress verify
+
+      - name: Confere que os testes de integracao rodaram
+        # disabledWithoutDocker/assumeTrue pulam em silencio; na CI eles precisam rodar
+        run: |
+          f=target/surefire-reports/TEST-br.com.fiap.hackaton.processor.VideoProcessorIntegrationTest.xml
+          test -f "$f" || { echo "::error::relatorio do teste de integracao nao encontrado"; exit 1; }
+          if grep -q '<skipped' "$f"; then
+            echo "::error::testes de integracao foram pulados (Docker ou ffmpeg ausentes)"; exit 1
+          fi
+          echo "integracao executada: $(grep -o 'tests="[0-9]*"' "$f")"
+
+      - name: Resumo da cobertura
+        if: always()
+        run: |
+          CSV=target/site/jacoco/jacoco.csv
+          if [ ! -s "$CSV" ]; then
+            echo "Relatorio JaCoCo nao gerado." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          awk -F, 'NR>1 {miss+=$8; cov+=$9}
+            END {
+              total = miss + cov
+              if (total == 0) {
+                print "Nenhuma classe instrumentada ainda (apenas bootstrap, que e excluido)."
+              } else {
+                printf "Cobertura de linhas: **%.1f%%** (%d/%d)\n", 100*cov/total, cov, total
+              }
+            }' "$CSV" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Gate configurado em \`jacoco.line.coverage\` no pom.xml." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publica relatorio JaCoCo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-video-processor
+          path: target/site/jacoco/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Publica resultados de teste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-video-processor
+          path: target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 7
